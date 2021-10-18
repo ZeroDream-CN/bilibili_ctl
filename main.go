@@ -78,13 +78,21 @@ type ApiDeleteResponse struct {
 var config Config
 var session *nic.Session
 var cookieKV nic.KV
+var cookie string
 
 func main() {
 	session = nic.NewSession()
-	log.Println("Bilibili 评论清理助手 1.0 by Akkariin")
+	fmt.Println(" ____  _ _ _ _     _ _ _    ____ _____ _     ")
+	fmt.Println("| __ )(_) (_) |__ (_) (_)  / ___|_   _| |    ")
+	fmt.Println("|  _ \\| | | | '_ \\| | | | | |     | | | |    ")
+	fmt.Println("| |_) | | | | |_) | | | | | |___  | | | |___ ")
+	fmt.Println("|____/|_|_|_|_.__/|_|_|_|  \\____| |_| |_____|")
+	fmt.Println("")
+	log.Println("Bilibili 评论管理工具 1.2 by Akkariin")
 	log.Println("--------------------------------------")
-	cookie := ""
+	cookie = ""
 	if FileExists("config.json") {
+		log.Println("正在加载配置文件...")
 		config = Config{}
 		configText := GetFileData("config.json")
 		err := jsoniter.Unmarshal([]byte(configText), &config)
@@ -98,6 +106,7 @@ func main() {
 			log.Fatalln(fmt.Sprintf("尝试更新配置文件内容时发生错误：%s", err.Error()))
 		}
 	} else {
+		log.Println("正在创建配置文件...")
 		config = Config{}
 		configText := GenerateConfig()
 		SetFileData("config.json", configText)
@@ -107,29 +116,31 @@ func main() {
 		}
 	}
 	if FileExists("cookie.txt") {
+		log.Println("正在读取 Cookie...")
 		cookie = GetFileData("cookie.txt")
 	} else {
 		ir := bufio.NewReader(os.Stdin)
-		log.Println("当前未设置 Cookie，请打开 Bilibili 创作中心，并按下 F12 打开浏览器控制台，转到 “网络” 或者 “Network”，然后刷新页面。")
-		log.Println("刷新后找到第一个请求，将 “请求标头” 或 “Request Header” 中的 cookie: 后面的内容复制，然后在这里粘贴（Win10 支持右键粘贴）")
-		log.Println("如果不知道如何操作的话请看 B 站上的文档介绍 https://space.bilibili.com/21165317 （@Akkariins）")
+		log.Println("请输入 Cookie 内容，获取 Cookie 方法请看 Github 上的文档介绍。")
+		log.Println("项目地址：https://github.com/ZeroDream-CN/bilibili_ctl")
 		fmt.Print("> ")
-		cookie, err := ir.ReadString('\n')
+		cookieText, err := ir.ReadString('\n')
 		if err == nil {
-			SetFileData("cookie.txt", cookie)
+			cookie = cookieText
+			SetFileData("cookie.txt", cookieText)
 			log.Println("已储存 Cookie 到文件 cookie.txt，程序开始运行...")
 		} else {
 			log.Fatalln(err.Error())
 		}
 	}
 	for {
-		checkComments(cookie)
+		CheckComments()
 		log.Println(fmt.Sprintf("等待 %s 秒后再次检查...", strconv.Itoa(config.Interval)))
 		time.Sleep(time.Duration(config.Interval) * time.Second)
 	}
 }
 
-func checkComments(cookie string) {
+// 获取评论内容并处理
+func CheckComments() {
 	if cookie != "" {
 		cookieKV = nic.KV{}
 		cookieList := strings.Split(cookie, ";")
@@ -170,12 +181,15 @@ func checkComments(cookie string) {
 							if IsBlockedUser(comment.Replier, comment.Mid) { // 判断此用户是否在黑名单内
 								log.Println(fmt.Sprintf("发现黑名单用户 [ %s ] 已删除该用户评论！", comment.Replier))
 								DeleteComment(comment.Oid, comment.Type, comment.ID, csrfToken)
+								time.Sleep(1 * time.Second)
 							} else if IsBlockedText(comment.Message) { // 判断是否触发违禁词内容
 								log.Println(fmt.Sprintf("触发黑名单词库 [ %s ] 已删除该用户评论！", comment.Replier))
 								DeleteComment(comment.Oid, comment.Type, comment.ID, csrfToken)
+								time.Sleep(1 * time.Second)
 							} else if IsBlockedRegex(comment.Message) { // 判断是否触发正则表达式判定
 								log.Println(fmt.Sprintf("触发黑名单正则 [ %s ] 已删除该用户评论！", comment.Replier))
 								DeleteComment(comment.Oid, comment.Type, comment.ID, csrfToken)
+								time.Sleep(1 * time.Second)
 							}
 						}
 					}
@@ -189,6 +203,7 @@ func checkComments(cookie string) {
 	}
 }
 
+// 删除评论
 func DeleteComment(oid int, ctype int, rpid int64, csrfToken string) bool {
 	resp, err := session.Post("https://api.bilibili.com/x/v2/reply/del", nic.H{
 		Cookies: cookieKV,
@@ -220,6 +235,7 @@ func DeleteComment(oid int, ctype int, rpid int64, csrfToken string) bool {
 	}
 }
 
+// 判断是否是白名单用户
 func IsWhiteListUser(userName string, userId int) bool {
 	for _, user := range config.WhiteList {
 		if userName == user {
@@ -236,6 +252,7 @@ func IsWhiteListUser(userName string, userId int) bool {
 	return false
 }
 
+// 判断是否是黑名单用户
 func IsBlockedUser(userName string, userId int) bool {
 	for _, user := range config.Block.Users {
 		if userName == user {
@@ -252,6 +269,7 @@ func IsBlockedUser(userName string, userId int) bool {
 	return false
 }
 
+// 判断是否触发关键字
 func IsBlockedText(message string) bool {
 	for _, block := range config.Block.Texts {
 		if strings.Contains(message, block) {
@@ -261,6 +279,7 @@ func IsBlockedText(message string) bool {
 	return false
 }
 
+// 正则表达式匹配评论内容
 func IsBlockedRegex(message string) bool {
 	if config.Block.Regex == "" {
 		return false
@@ -272,6 +291,7 @@ func IsBlockedRegex(message string) bool {
 	return false
 }
 
+// 判断视频是否需要监控
 func IsVideoNeedBlock(bvid string) bool {
 	if len(config.Block.Video) == 0 {
 		return true
@@ -284,6 +304,7 @@ func IsVideoNeedBlock(bvid string) bool {
 	return false
 }
 
+// 生成默认的配置文件
 func GenerateConfig() string {
 	config := Config{
 		Interval: 30,
