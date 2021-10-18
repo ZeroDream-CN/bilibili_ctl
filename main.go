@@ -79,6 +79,7 @@ var config Config
 var session *nic.Session
 var cookieKV nic.KV
 var cookie string
+var deleteLog string
 
 func main() {
 	session = nic.NewSession()
@@ -132,6 +133,12 @@ func main() {
 			log.Fatalln(err.Error())
 		}
 	}
+	if FileExists("delete_comments.log") {
+		deleteLog = GetFileData("delete_comments.log")
+	} else {
+		deleteLog = ""
+		SetFileData("delete_comments.log", deleteLog)
+	}
 	for {
 		CheckComments()
 		log.Println(fmt.Sprintf("等待 %s 秒后再次检查...", strconv.Itoa(config.Interval)))
@@ -180,14 +187,17 @@ func CheckComments() {
 						if IsVideoNeedBlock(comment.Bvid) {
 							if IsBlockedUser(comment.Replier, comment.Mid) { // 判断此用户是否在黑名单内
 								log.Println(fmt.Sprintf("发现黑名单用户 [ %s ] 已删除该用户评论！", comment.Replier))
+								LogToFile(fmt.Sprintf("触发黑名单，删除了用户 [ %s ] 的评论：%s", comment.Replier, comment.Message))
 								DeleteComment(comment.Oid, comment.Type, comment.ID, csrfToken)
 								time.Sleep(1 * time.Second)
 							} else if IsBlockedText(comment.Message) { // 判断是否触发违禁词内容
 								log.Println(fmt.Sprintf("触发黑名单词库 [ %s ] 已删除该用户评论！", comment.Replier))
+								LogToFile(fmt.Sprintf("触发关键字，删除了用户 [ %s ] 的评论：%s", comment.Replier, comment.Message))
 								DeleteComment(comment.Oid, comment.Type, comment.ID, csrfToken)
 								time.Sleep(1 * time.Second)
 							} else if IsBlockedRegex(comment.Message) { // 判断是否触发正则表达式判定
 								log.Println(fmt.Sprintf("触发黑名单正则 [ %s ] 已删除该用户评论！", comment.Replier))
+								LogToFile(fmt.Sprintf("触发正则表达式，删除了用户 [ %s ] 的评论：%s", comment.Replier, comment.Message))
 								DeleteComment(comment.Oid, comment.Type, comment.ID, csrfToken)
 								time.Sleep(1 * time.Second)
 							}
@@ -223,16 +233,25 @@ func DeleteComment(oid int, ctype int, rpid int64, csrfToken string) bool {
 				return true
 			} else {
 				log.Println(fmt.Sprintf("无法删除评论：%s", apiJson.Message))
+				LogToFile(fmt.Sprintf("删除评论失败：%s", apiJson.Message))
 				return false
 			}
 		} else {
 			log.Println(fmt.Sprintf("无法删除评论：%s", err.Error()))
+			LogToFile(fmt.Sprintf("删除评论失败：%s", err.Error()))
 			return false
 		}
 	} else {
 		log.Println(fmt.Sprintf("无法删除评论：%s", err.Error()))
+		LogToFile(fmt.Sprintf("删除评论失败：%s", err.Error()))
 		return false
 	}
+}
+
+func LogToFile(text string) {
+	timeStr := time.Now().Format("2006-01-02 15:04:05")
+	deleteLog += fmt.Sprintf("[%s] %s\n", timeStr, text)
+	SetFileData("delete_comments.log", deleteLog)
 }
 
 // 判断是否是白名单用户
