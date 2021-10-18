@@ -1,0 +1,24 @@
+{
+    "Interval": 30,
+    "Block": {
+        "Users": [
+            "HK赤霊",
+            "LONEDR"
+        ],
+        "Video": [],
+        "Texts": [
+            "测试评论内容",
+            "傻逼",
+            "垃圾视频"
+        ],
+        "Regex": ""
+    },
+    "WhiteList": [],
+    "Request": {
+        "Order": "ctime",
+        "Filter": "-1",
+        "Type": "1",
+        "Page": "1",
+        "Size": "20"
+    }
+}
